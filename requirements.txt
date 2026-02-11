@@ -1,0 +1,19 @@
+# YOLO 데이터셋 변환 프로젝트 의존성
+# Python 3.10+ 필요
+
+# 표준 라이브러리만 사용하므로 추가 패키지 없음
+# 필요시 pydantic 사용 가능 (선택사항)
+
+# YOLOv8 학습용
+ultralytics>=8.0.0
+torch>=2.0.0
+torchvision>=0.15.0
+
+# CNN crop 데이터셋 생성용
+PyYAML>=6.0
+Pillow>=9.0.0
+
+# ONNX → TensorFlow 변환용
+onnx>=1.14.0
+onnx-tf>=1.10.0
+tensorflow>=2.12.0

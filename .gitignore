@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 가상환경
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ===== 프로젝트별: 데이터 및 모델 (용량 큼) =====
+# 원본/수집 데이터
+raw_data/
+
+# CNN 크롭 데이터셋
+cnn_dataset/
+
+# YOLO 학습용 생성 데이터셋
+output/dataset/
+output/*.cache
+
+# 학습된 모델 및 변환 결과
+output/saved_model/
+runs/
+
+# 사전학습 가중치
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.pb
+*.keras
+*.h5
+*.hdf5
+
+# TensorFlow SavedModel 변수
+**/variables/
+**/fingerprint.pb
+**/saved_model.pb
+
+# 로그 및 캐시
+*.log
+*.cache
+wandb/

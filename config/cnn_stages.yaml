@@ -1,0 +1,61 @@
+# CNN 2단계 파이프라인 설정
+# 목적: 오탐 제거(1단계) → 종 분류(2단계)
+
+pipeline: "오탐 제거 → 종 분류 (2단계)"
+
+# 1단계: 오탐 제거 (이진 분류)
+stage1:
+  purpose: "오탐 제거"
+  task: "binary"
+  classes:
+    - "animal"      # YOLO 정답 bbox crop → 동물
+    - "non_animal"  # 오탐 crop (별도 수집 또는 YOLO 추론 결과)
+  dataset_dir: "cnn_dataset/stage1_animal_vs_background"
+  # train/val 하위: animal/, non_animal/
+
+# 2단계: 종 분류 (다중 분류)
+stage2:
+  purpose: "종 분류"
+  task: "multiclass"
+  num_classes: 8
+  # data.yaml과 동일한 클래스 순서
+  class_names:
+    - "개"
+    - "고라니"
+    - "고양이"
+    - "너구리"
+    - "노루"
+    - "멧돼지"
+    - "조류"
+    - "족제비"
+  dataset_dir: "cnn_dataset/stage2_species"
+  # train/val 하위: 개/, 고라니/, 고양이/, ...
+
+# 공통: crop 생성 시 참조할 YOLO 데이터셋
+yolo_dataset:
+  data_yaml: "output/dataset/data.yaml"
+  images_train: "output/dataset/images/train"
+  images_val: "output/dataset/images/val"
+  labels_train: "output/dataset/labels/train"
+  labels_val: "output/dataset/labels/val"
+
+# 3단계 non_animal 수집 시 사용할 YOLO 모델
+yolo_model_pt: "runs/detect/runs/detect/train2/weights/best.pt"
+
+# 4단계 CNN 학습 기본값 (scripts/train_cnn.py)
+train_defaults:
+  img_size: 224
+  batch_size: 32
+  stage1_epochs: 20
+  stage2_epochs: 30
+  lr: 1.0e-4
+  output_dir: "runs/cnn"
+
+# 5단계 2단계 추론 시 사용할 모델 경로 (run_two_stage_inference.py)
+inference:
+  yolo: "runs/detect/runs/detect/train2/weights/best.pt"
+  cnn_stage1: "runs/cnn/stage1/best.keras"
+  cnn_stage2: "runs/cnn/stage2/best.keras"
+  # TFLite 배포 시 (Jetson): 아래로 교체 가능
+  # cnn_stage1_tflite: "runs/cnn/stage1/best_float32.tflite"
+  # cnn_stage2_tflite: "runs/cnn/stage2/best_float32.tflite"
