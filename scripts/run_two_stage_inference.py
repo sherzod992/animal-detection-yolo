@@ -182,14 +182,14 @@ def main():
     parser.add_argument(
         "--conf",
         type=float,
-        default=0.25,
-        help="YOLO 최소 confidence",
+        default=None,
+        help="YOLO 최소 confidence (미지정 시 config inference.conf 사용)",
     )
     parser.add_argument(
         "--padding",
         type=float,
-        default=0.1,
-        help="crop bbox 확장 비율",
+        default=None,
+        help="crop bbox 확장 비율 (미지정 시 config inference.padding 사용)",
     )
     parser.add_argument(
         "--out-dir",
@@ -224,6 +224,8 @@ def main():
     if not yolo_path.exists():
         print(f"YOLO 모델 없음: {yolo_path}")
         sys.exit(1)
+    conf = args.conf if args.conf is not None else inf.get("conf", 0.25)
+    padding = args.padding if args.padding is not None else inf.get("padding", 0.1)
     stage2_class_names = config["stage2"]["class_names"]
     train_defaults = config.get("train_defaults", {})
     cnn_img_size = train_defaults.get("img_size", 224)
@@ -262,12 +264,12 @@ def main():
 
     print("=" * 60)
     print("2단계 추론 시작")
-    print(f"입력: {len(image_paths)}장, YOLO conf>={args.conf}")
+    print(f"입력: {len(image_paths)}장, YOLO conf>={conf}, padding={padding}")
     print("=" * 60)
     for img_path in image_paths:
         detections = run_two_stage(
             img_path, yolo, cnn1, cnn2, stage2_class_names, cnn_img_size,
-            yolo_conf=args.conf, padding_ratio=args.padding,
+            yolo_conf=conf, padding_ratio=padding,
         )
         n_animal = sum(1 for d in detections if d["animal"])
         print(f"{img_path.name}: YOLO 박스 {len(detections)}개 → 동물 {n_animal}개")

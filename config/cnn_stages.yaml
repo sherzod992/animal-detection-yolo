@@ -56,6 +56,15 @@ inference:
   yolo: "runs/detect/runs/detect/train2/weights/best.pt"
   cnn_stage1: "runs/cnn/stage1/best.keras"
   cnn_stage2: "runs/cnn/stage2/best.keras"
+  conf: 0.25          # YOLO 최소 confidence
+  padding: 0.1        # crop bbox 확장 비율
   # TFLite 배포 시 (Jetson): 아래로 교체 가능
   # cnn_stage1_tflite: "runs/cnn/stage1/best_float32.tflite"
   # cnn_stage2_tflite: "runs/cnn/stage2/best_float32.tflite"
+
+# 3단계 non_animal 수집 시 threshold (collect_non_animal_crops.py)
+collect_non_animal:
+  conf: 0.25          # 오탐 후보로 쓸 YOLO 예측 최소 confidence
+  iou: 0.3            # GT와 IoU가 이 값 미만이면 오탐으로 간주
+  max_per_image: 5    # 이미지당 최대 non_animal crop 수 (0=제한 없음)
+  padding: 0.1        # crop bbox 확장 비율

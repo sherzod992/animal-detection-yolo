@@ -171,26 +171,26 @@ def main():
     parser.add_argument(
         "--conf",
         type=float,
-        default=0.25,
-        help="오탐 후보로 쓸 예측 최소 confidence (기본 0.25)",
+        default=None,
+        help="오탐 후보로 쓸 예측 최소 confidence (미지정 시 config collect_non_animal.conf)",
     )
     parser.add_argument(
         "--iou",
         type=float,
-        default=0.3,
-        help="GT와 IoU가 이 값 미만이면 오탐으로 간주 (기본 0.3)",
+        default=None,
+        help="GT와 IoU가 이 값 미만이면 오탐으로 간주 (미지정 시 config collect_non_animal.iou)",
     )
     parser.add_argument(
         "--max-per-image",
         type=int,
-        default=5,
-        help="이미지당 최대 non_animal crop 수 (0=제한 없음, 기본 5)",
+        default=None,
+        help="이미지당 최대 non_animal crop 수 (미지정 시 config collect_non_animal.max_per_image)",
     )
     parser.add_argument(
         "--padding",
         type=float,
-        default=0.1,
-        help="crop bbox 확장 비율 (기본 0.1)",
+        default=None,
+        help="crop bbox 확장 비율 (미지정 시 config collect_non_animal.padding)",
     )
     args = parser.parse_args()
 
@@ -199,12 +199,20 @@ def main():
         print(f"설정 파일 없음: {config_path}")
         sys.exit(1)
     config = load_config(config_path)
+    cna = config.get("collect_non_animal", {})
+    conf = args.conf if args.conf is not None else cna.get("conf", 0.25)
+    iou = args.iou if args.iou is not None else cna.get("iou", 0.3)
+    max_per_image = args.max_per_image if args.max_per_image is not None else cna.get("max_per_image", 5)
+    padding = args.padding if args.padding is not None else cna.get("padding", 0.1)
+
     yolo_cfg = config["yolo_dataset"]
     stage1_dir = PROJECT_ROOT / config["stage1"]["dataset_dir"]
     if args.model:
         model_path = Path(args.model)
     else:
-        model_path = PROJECT_ROOT / yolo_cfg.get("yolo_model_pt", "runs/detect/runs/detect/train2/weights/best.pt")
+        model_path = PROJECT_ROOT / config.get(
+            "yolo_model_pt", yolo_cfg.get("yolo_model_pt", "runs/detect/runs/detect/train2/weights/best.pt")
+        )
     images_train = PROJECT_ROOT / yolo_cfg["images_train"]
     images_val = PROJECT_ROOT / yolo_cfg["images_val"]
     labels_train = PROJECT_ROOT / yolo_cfg["labels_train"]
@@ -223,7 +231,7 @@ def main():
     print("non_animal(오탐) crop 수집")
     print(f"Stage1 디렉터리: {stage1_dir}")
     print(f"YOLO 모델: {model_path}")
-    print(f"conf >= {args.conf}, IoU < {args.iou} → 오탐, max_per_image={args.max_per_image}")
+    print(f"conf >= {conf}, IoU < {iou} → 오탐, max_per_image={max_per_image}, padding={padding}")
     print("=" * 60)
 
     for split, im_dir, lb_dir in [
@@ -232,7 +240,7 @@ def main():
     ]:
         n, skip_label, skip_pred = process_split(
             im_dir, lb_dir, stage1_dir, model, split,
-            args.conf, args.iou, args.max_per_image, args.padding,
+            conf, iou, max_per_image, padding,
         )
         print(f"[{split}] non_animal crop 수: {n}, (라벨 없음 스킵: {skip_label}, 예측 없음 스킵: {skip_pred})")
 

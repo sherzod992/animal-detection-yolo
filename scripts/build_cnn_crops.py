@@ -26,6 +26,39 @@ def load_config(config_path: Path) -> dict:
         return yaml.safe_load(f)
 
 
+def load_class_names_from_yolo_dataset(project_root: Path, yolo_config: dict) -> list:
+    """
+    YOLO 데이터셋의 클래스 순서를 data.yaml 또는 classes.txt에서 로드.
+    단일 소스로 YOLO class index와 CNN 폴더 매핑을 일치시킵니다.
+    """
+    data_yaml_path = project_root / yolo_config["data_yaml"]
+    dataset_dir = data_yaml_path.parent
+
+    # 1) data.yaml에서 names 로드 (인덱스 순서 유지)
+    if data_yaml_path.exists():
+        with open(data_yaml_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        if data and "names" in data:
+            names = data["names"]
+            nc = data.get("nc", len(names) if isinstance(names, (list, dict)) else 0)
+            if isinstance(names, list):
+                return names[:nc]
+            if isinstance(names, dict):
+                return [names.get(i) or names.get(str(i)) for i in range(nc)]
+
+    # 2) fallback: classes.txt (한 줄당 한 클래스, 줄 순서 = 인덱스)
+    classes_file = dataset_dir / "classes.txt"
+    if classes_file.exists():
+        lines = [line.strip() for line in classes_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+        if lines:
+            return lines
+
+    raise FileNotFoundError(
+        f"YOLO 클래스 순서를 찾을 수 없습니다. {data_yaml_path} 또는 {classes_file} 를 확인하세요. "
+        "먼저 scripts/build_yolodataset.py 를 실행하세요."
+    )
+
+
 def yolo_line_to_bbox(line: str, img_w: int, img_h: int, padding_ratio: float = 0.0):
     """
     YOLO 한 줄 (class_id cx cy w h) → 픽셀 bbox (x1, y1, x2, y2), class_id.
@@ -148,7 +181,15 @@ def main():
     yolo = config["yolo_dataset"]
     stage1_dir = PROJECT_ROOT / config["stage1"]["dataset_dir"]
     stage2_dir = PROJECT_ROOT / config["stage2"]["dataset_dir"]
-    class_names = config["stage2"]["class_names"]
+
+    # YOLO class index와 동일한 순서로 data.yaml/classes.txt에서 로드 (단일 소스)
+    class_names = load_class_names_from_yolo_dataset(PROJECT_ROOT, yolo)
+    config_class_names = config["stage2"].get("class_names")
+    if config_class_names and config_class_names != class_names:
+        print(
+            f"경고: config stage2.class_names 순서가 data.yaml/classes.txt와 다릅니다. "
+            f"data.yaml 기준({class_names})으로 crop 폴더를 생성합니다."
+        )
 
     images_train = PROJECT_ROOT / yolo["images_train"]
     images_val = PROJECT_ROOT / yolo["images_val"]
@@ -164,6 +205,7 @@ def main():
     print("CNN crop 데이터셋 생성")
     print(f"Stage1: {stage1_dir}")
     print(f"Stage2: {stage2_dir}")
+    print(f"클래스 순서 (data.yaml/classes.txt): {class_names}")
     print(f"Padding: {args.padding * 100:.0f}%")
     print("=" * 60)
 

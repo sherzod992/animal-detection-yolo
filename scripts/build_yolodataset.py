@@ -6,7 +6,7 @@ YOLO 데이터셋 빌드 엔트리포인트
 import sys
 from pathlib import Path
 
-# 프로젝트 루트를 경로에 추가
+# 프로젝트 루트
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
