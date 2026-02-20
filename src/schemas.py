@@ -128,14 +128,46 @@ def get_bbox_from_annotation(annotation: Dict[str, Any]) -> Optional[List[List[f
     return bbox
 
 
-def get_category_name(annotation: Dict[str, Any]) -> Optional[str]:
+def _build_category_id_to_name(data: Dict[str, Any]) -> Dict[int, str]:
+    """
+    JSON 최상위 'categories' 배열에서 id -> name 매핑을 만듭니다.
+    형식: [{"id": 1, "name": "dog"}, ...] 또는 [{"category_id": 1, "category_name": "dog"}, ...]
+    """
+    mapping = {}
+    for item in data.get("categories") or []:
+        if not isinstance(item, dict):
+            continue
+        cid = item.get("id") or item.get("category_id")
+        name = item.get("name") or item.get("category_name")
+        if cid is not None and name is not None:
+            mapping[int(cid)] = str(name)
+    return mapping
+
+
+def get_category_name(
+    annotation: Dict[str, Any],
+    data: Optional[Dict[str, Any]] = None
+) -> Optional[str]:
     """
     annotation에서 category_name을 추출합니다.
+    category_name이 없고 category_id만 있으면, data의 'categories'에서 이름을 찾습니다.
     
     Args:
         annotation: annotation 딕셔너리
+        data: 전체 JSON 데이터 (categories 포함 시 category_id 해석용)
         
     Returns:
         category_name 또는 None
     """
-    return annotation.get("category_name")
+    name = (
+        annotation.get("category_name")
+        or annotation.get("category")
+        or annotation.get("name")
+    )
+    if name is not None and name != "":
+        return str(name)
+    cid = annotation.get("category_id")
+    if cid is not None and data is not None:
+        id_to_name = _build_category_id_to_name(data)
+        return id_to_name.get(int(cid))
+    return None

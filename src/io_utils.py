@@ -39,8 +39,8 @@ def find_image_json_pairs(raw_dir: Path) -> List[Tuple[Path, Path]]:
         stem = json_path.stem  # 확장자 제외한 파일명
         json_files[stem] = json_path
     
-    # 모든 이미지 파일 찾기 (.jpg, .jpeg)
-    for ext in ["*.jpg", "*.jpeg", "*.JPG", "*.JPEG"]:
+    # 모든 이미지 파일 찾기 (.jpg, .jpeg, .png)
+    for ext in ["*.jpg", "*.jpeg", "*.JPG", "*.JPEG", "*.png", "*.PNG"]:
         for img_path in raw_dir.rglob(ext):
             stem = img_path.stem
             image_files[stem] = img_path
@@ -120,13 +120,19 @@ def build_class_mapping(
     existing_mapping = load_class_mapping(classes_file)
     
     if existing_mapping is not None:
-        # 기존 매핑에 없는 새로운 클래스가 있는지 확인
         new_classes = all_category_names - set(existing_mapping.keys())
         if new_classes:
-            logger.warning(
-                f"새로운 클래스가 발견되었습니다: {new_classes}. "
-                "기존 매핑을 유지하고 새 클래스는 추가되지 않습니다."
+            # 기존 순서 유지 + 새 클래스를 알파벳 순으로 뒤에 추가
+            existing_names_ordered = sorted(
+                existing_mapping.keys(),
+                key=lambda name: existing_mapping[name]
             )
+            merged_names = existing_names_ordered + sorted(new_classes)
+            logger.info(
+                f"새 클래스 추가: {sorted(new_classes)}. "
+                f"전체 클래스 수: {len(merged_names)}"
+            )
+            return save_class_mapping(classes_file, merged_names)
         return existing_mapping
     
     # 새 매핑 생성 (알파벳 순서로 정렬하여 일관성 유지)
