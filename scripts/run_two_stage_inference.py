@@ -1,6 +1,7 @@
 """
 5단계: YOLO → Stage1 CNN(오탐 제거) → Stage2 CNN(종 분류) 2단계 추론
 이미지/폴더 입력, 최종 탐지 결과(박스+종) 출력 및 시각화
+Keras(.keras) / PyTorch(.pt) 모델 모두 지원
 """
 
 import argparse
@@ -26,32 +27,104 @@ def load_config(config_path: Path) -> dict:
         return yaml.safe_load(f)
 
 
+def _load_pytorch_cnn(model_path: Path, num_classes: int):
+    """PyTorch .pt 모델 로드 (train_cnn_pytorch.py와 동일 구조)."""
+    import torch
+    from torchvision.models import mobilenet_v2
+
+    base = mobilenet_v2(weights=None)
+    features = base.features
+    model = torch.nn.Sequential(
+        features,
+        torch.nn.AdaptiveAvgPool2d(1),
+        torch.nn.Flatten(),
+        torch.nn.Dropout(0.3),
+        torch.nn.Linear(1280, num_classes),
+    )
+    state = torch.load(model_path, map_location="cpu")
+    model.load_state_dict(state)
+    model.eval()
+    return model
+
+
 def load_models(yolo_path: Path, cnn1_path: Path, cnn2_path: Path, cnn_img_size: int = 224):
-    """YOLO, Stage1 CNN, Stage2 CNN 로드. Stage2 class_names.json도 로드."""
+    """YOLO, Stage1 CNN, Stage2 CNN 로드. .pt(PyTorch) 우선, 없으면 .keras(Keras)."""
     from ultralytics import YOLO
+
     yolo = YOLO(str(yolo_path))
     cnn1 = None
     cnn2 = None
+    cnn_backend = None  # "pytorch" | "keras"
     stage2_class_names = []
-    if cnn1_path.exists():
-        import tensorflow as tf
-        cnn1 = tf.keras.models.load_model(str(cnn1_path))
-    if cnn2_path.exists():
-        import tensorflow as tf
-        cnn2 = tf.keras.models.load_model(str(cnn2_path))
-        names_file = cnn2_path.parent / "class_names.json"
+
+    def _resolve_cnn_path(base_path: Path):
+        """best.pt 우선, 없으면 best.keras."""
+        dir_path = base_path.parent if base_path.suffix else base_path
+        pt_path = dir_path / "best.pt"
+        keras_path = dir_path / "best.keras"
+        if pt_path.exists():
+            return pt_path, "pytorch"
+        if keras_path.exists():
+            return keras_path, "keras"
+        if base_path.exists():
+            return base_path, "pytorch" if base_path.suffix == ".pt" else "keras"
+        return None, None
+
+    # Stage1 CNN
+    p1, backend1 = _resolve_cnn_path(cnn1_path)
+    if p1 and backend1:
+        if backend1 == "pytorch":
+            cnn1 = _load_pytorch_cnn(p1, num_classes=2)
+            cnn_backend = "pytorch"
+            print("Stage1 CNN: PyTorch (.pt)")
+        else:
+            import tensorflow as tf
+            cnn1 = tf.keras.models.load_model(str(p1))
+            cnn_backend = "keras"
+            print("Stage1 CNN: Keras (.keras)")
+
+    # Stage2 CNN
+    p2, backend2 = _resolve_cnn_path(cnn2_path)
+    if p2 and backend2:
+        names_file = p2.parent / "class_names.json"
         if names_file.exists():
             with open(names_file, encoding="utf-8") as f:
                 stage2_class_names = json.load(f)
-    return yolo, cnn1, cnn2, stage2_class_names, cnn_img_size
+        num_classes = len(stage2_class_names)
+        if backend2 == "pytorch":
+            cnn2 = _load_pytorch_cnn(p2, num_classes=num_classes)
+            if cnn_backend is None:
+                cnn_backend = "pytorch"
+            print("Stage2 CNN: PyTorch (.pt)")
+        else:
+            import tensorflow as tf
+            cnn2 = tf.keras.models.load_model(str(p2))
+            if cnn_backend is None:
+                cnn_backend = "keras"
+            print("Stage2 CNN: Keras (.keras)")
+
+    return yolo, cnn1, cnn2, stage2_class_names, cnn_img_size, cnn_backend
 
 
-def preprocess_crop_for_cnn(crop_bgr_or_rgb: np.ndarray, size: int) -> np.ndarray:
-    """Crop (H,W,3) 0-255 → (1, size, size, 3) float32. 학습 시 image_dataset_from_directory는 rescale 없음(0-255)."""
+def preprocess_crop_for_cnn(crop_rgb: np.ndarray, size: int, backend: str):
+    """Crop (H,W,3) 0-255 → 모델 입력 텐서. backend: 'pytorch' | 'keras'."""
+    if backend == "pytorch":
+        from PIL import Image
+        from torchvision import transforms
+
+        transform = transforms.Compose([
+            transforms.Resize((size, size)),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ])
+        img = Image.fromarray(crop_rgb.astype(np.uint8))
+        t = transform(img)
+        return t.unsqueeze(0)  # (1, 3, H, W)
+    # keras: (1, H, W, 3) float32 0-255 (학습 시 rescale 없음)
     import tensorflow as tf
-    img = tf.image.resize(crop_bgr_or_rgb, (size, size))
-    img = np.expand_dims(img, axis=0)
-    return img.astype(np.float32)
+    img = tf.convert_to_tensor(crop_rgb)
+    img = tf.image.resize(img, (size, size))
+    return np.expand_dims(img.numpy(), axis=0).astype(np.float32)
 
 
 def run_two_stage(
@@ -61,6 +134,7 @@ def run_two_stage(
     cnn2,
     stage2_class_names: list,
     cnn_img_size: int,
+    cnn_backend: str = "keras",
     yolo_conf: float = 0.25,
     padding_ratio: float = 0.0,
 ):
@@ -69,7 +143,7 @@ def run_two_stage(
     반환: list of dict { "box": [x1,y1,x2,y2], "animal": bool, "species": str or None, "yolo_conf": float, "cnn1_prob": float }
     """
     from PIL import Image
-    import tensorflow as tf
+
     img_pil = Image.open(image_path).convert("RGB")
     img_np = np.array(img_pil)
     h, w = img_np.shape[:2]
@@ -101,18 +175,39 @@ def run_two_stage(
         crop = img_np[y1:y2, x1:x2]
         if crop.size == 0:
             continue
-        X = preprocess_crop_for_cnn(crop, cnn_img_size)
+
         is_animal = True
         cnn1_prob = 1.0
         species = None
+
+        if cnn1 is not None or cnn2 is not None:
+            X = preprocess_crop_for_cnn(crop, cnn_img_size, cnn_backend)
+
         if cnn1 is not None:
-            p1 = cnn1.predict(X, verbose=0)[0]
-            cnn1_prob = float(p1[0])
-            is_animal = np.argmax(p1) == 0
+            if cnn_backend == "pytorch":
+                import torch
+                with torch.no_grad():
+                    logits = cnn1(X)
+                    probs = torch.softmax(logits, dim=1).numpy()[0]
+                cnn1_prob = float(probs[0])
+                is_animal = np.argmax(probs) == 0
+            else:
+                p1 = cnn1.predict(X, verbose=0)[0]
+                cnn1_prob = float(p1[0])
+                is_animal = np.argmax(p1) == 0
+
         if is_animal and cnn2 is not None and len(stage2_class_names) > 0:
-            p2 = cnn2.predict(X, verbose=0)[0]
-            idx = int(np.argmax(p2))
+            if cnn_backend == "pytorch":
+                import torch
+                with torch.no_grad():
+                    logits = cnn2(X)
+                    probs = torch.softmax(logits, dim=1).numpy()[0]
+                idx = int(np.argmax(probs))
+            else:
+                p2 = cnn2.predict(X, verbose=0)[0]
+                idx = int(np.argmax(p2))
             species = stage2_class_names[idx] if idx < len(stage2_class_names) else None
+
         out.append({
             "box": [int(x1), int(y1), int(x2), int(y2)],
             "animal": is_animal,
@@ -210,7 +305,7 @@ def main():
         sys.exit(1)
     config = load_config(config_path)
     inf = config.get("inference", {})
-    yolo_model_pt = inf.get("yolo") or config.get("yolo_model_pt", "runs/detect/runs/detect/train2/weights/best.pt")
+    yolo_model_pt = inf.get("yolo") or config.get("yolo_model_pt", "runs/detect/runs/detect/train/weights/best.pt")
     yolo_path = args.yolo or (PROJECT_ROOT / yolo_model_pt)
     cnn1_path = args.cnn_stage1 or (PROJECT_ROOT / inf.get("cnn_stage1", "runs/cnn/stage1/best.keras"))
     cnn2_path = args.cnn_stage2 or (PROJECT_ROOT / inf.get("cnn_stage2", "runs/cnn/stage2/best.keras"))
@@ -231,11 +326,13 @@ def main():
     cnn_img_size = train_defaults.get("img_size", 224)
 
     print("모델 로딩...")
-    yolo, cnn1, cnn2, loaded_class_names, cnn_img_size = load_models(
+    yolo, cnn1, cnn2, loaded_class_names, cnn_img_size, cnn_backend = load_models(
         yolo_path, cnn1_path, cnn2_path, cnn_img_size
     )
     if loaded_class_names:
         stage2_class_names = loaded_class_names
+    if cnn_backend is None:
+        cnn_backend = "keras"  # fallback (cnn 미사용 시 미도달)
     if cnn1 is None:
         print("경고: Stage1 CNN 없음. YOLO 결과만 사용 (모두 animal로 간주).")
     if cnn2 is None:
@@ -269,6 +366,7 @@ def main():
     for img_path in image_paths:
         detections = run_two_stage(
             img_path, yolo, cnn1, cnn2, stage2_class_names, cnn_img_size,
+            cnn_backend=cnn_backend,
             yolo_conf=conf, padding_ratio=padding,
         )
         n_animal = sum(1 for d in detections if d["animal"])

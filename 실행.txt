@@ -1,0 +1,50 @@
+[프로젝트 실행 순서]
+
+1단계: 가상환경 활성화
+source venv/bin/activate
+
+YOLO 학습용 데이터셋 생성
+python scripts/build_yolodataset.py
+→ raw_data/ 안의 이미지 + JSON 어노테이션을 YOLO 학습 형식으로 변환
+
+
+2단계: YOLO 모델 학습
+python scripts/train_yolo.py --data output/dataset/data.yaml
+→ 이미지에서 동물 bbox를 탐지하는 YOLOv8 모델 생성
+
+
+3단계: CNN용 crop 데이터셋 생성
+python scripts/build_cnn_crops.py
+→ YOLO 라벨 기준으로 bbox를 잘라 CNN 학습용 이미지 생성
+
+
+4단계: non_animal(오탐) crop 수집
+python scripts/collect_non_animal_crops.py
+→ YOLO 예측 중 GT와 겹치지 않는 오탐을 crop
+→ Stage1 non_animal 데이터로 사용
+
+
+5단계: CNN Stage1 학습 (동물 vs 비동물)
+# PyTorch (RTX 50 시리즈 GPU 지원) - 권장
+python scripts/train_cnn_pytorch.py --stage 1
+# Keras/TensorFlow (CPU만, RTX 50 미지원)
+python scripts/train_cnn.py --stage 1 --cpu-only
+→ animal vs non_animal 이진 분류 모델 학습
+→ YOLO 오탐 제거용 필터 모델
+
+
+6단계: CNN Stage2 학습 (종 분류)
+# PyTorch - 권장
+python scripts/train_cnn_pytorch.py --stage 2
+# Keras
+python scripts/train_cnn.py --stage 2 --cpu-only
+→ 14종 동물 다중 분류 모델 학습
+
+
+7단계: 실제 추론 실행 (2단계 파이프라인)
+python scripts/run_two_stage_inference.py <이미지_또는_폴더_경로>
+
+동작 흐름:
+YOLO → 동물 후보 bbox 탐지
+→ Stage1 CNN → 동물/비동물 필터링
+→ Stage2 CNN → 동물 종류 분류

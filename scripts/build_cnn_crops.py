@@ -1,7 +1,7 @@
 """
 YOLO 라벨 기반 CNN용 crop 데이터셋 생성
 - Stage1: 오탐 제거용 → animal/ (YOLO 정답 bbox crop)
-- Stage2: 종 분류용 → 클래스별 폴더 (개, 고라니, ...)
+- Stage2: 종 분류용 → 클래스별 폴더 (YOLO와 동일한 14개 클래스: bird, cat, dog, duck, fox, magpie, magpie2_500, pheasant, rabbit, raccoon_dog, roe_deer, water_deer, weasel, wild_boar)
 """
 
 import argparse

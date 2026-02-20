@@ -211,7 +211,7 @@ def main():
         model_path = Path(args.model)
     else:
         model_path = PROJECT_ROOT / config.get(
-            "yolo_model_pt", yolo_cfg.get("yolo_model_pt", "runs/detect/runs/detect/train2/weights/best.pt")
+            "yolo_model_pt", yolo_cfg.get("yolo_model_pt", "runs/detect/runs/detect/train/weights/best.pt")
         )
     images_train = PROJECT_ROOT / yolo_cfg["images_train"]
     images_val = PROJECT_ROOT / yolo_cfg["images_val"]

@@ -17,19 +17,25 @@ stage1:
 stage2:
   purpose: "종 분류"
   task: "multiclass"
-  num_classes: 8
-  # data.yaml과 동일한 클래스 순서
+  num_classes: 14
+  # data.yaml과 동일한 클래스 순서 (YOLO 학습 시 사용한 14개 클래스)
   class_names:
-    - "개"
-    - "고라니"
-    - "고양이"
-    - "너구리"
-    - "노루"
-    - "멧돼지"
-    - "조류"
-    - "족제비"
+    - "bird"
+    - "cat"
+    - "dog"
+    - "duck"
+    - "fox"
+    - "magpie"
+    - "magpie2_500"
+    - "pheasant"
+    - "rabbit"
+    - "raccoon_dog"
+    - "roe_deer"
+    - "water_deer"
+    - "weasel"
+    - "wild_boar"
   dataset_dir: "cnn_dataset/stage2_species"
-  # train/val 하위: 개/, 고라니/, 고양이/, ...
+  # train/val 하위: bird/, cat/, dog/, duck/, fox/, magpie/, magpie2_500/, pheasant/, rabbit/, raccoon_dog/, roe_deer/, water_deer/, weasel/, wild_boar/
 
 # 공통: crop 생성 시 참조할 YOLO 데이터셋
 yolo_dataset:
@@ -40,7 +46,7 @@ yolo_dataset:
   labels_val: "output/dataset/labels/val"
 
 # 3단계 non_animal 수집 시 사용할 YOLO 모델
-yolo_model_pt: "runs/detect/runs/detect/train2/weights/best.pt"
+yolo_model_pt: "runs/detect/runs/detect/train/weights/best.pt"
 
 # 4단계 CNN 학습 기본값 (scripts/train_cnn.py)
 train_defaults:
@@ -53,7 +59,7 @@ train_defaults:
 
 # 5단계 2단계 추론 시 사용할 모델 경로 (run_two_stage_inference.py)
 inference:
-  yolo: "runs/detect/runs/detect/train2/weights/best.pt"
+  yolo: "runs/detect/runs/detect/train/weights/best.pt"
   cnn_stage1: "runs/cnn/stage1/best.keras"
   cnn_stage2: "runs/cnn/stage2/best.keras"
   conf: 0.25          # YOLO 최소 confidence

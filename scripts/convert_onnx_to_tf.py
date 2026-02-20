@@ -64,8 +64,8 @@ def main():
     parser.add_argument(
         "--onnx",
         type=str,
-        default="runs/detect/runs/detect/train2/weights/best.onnx",
-        help="ONNX 모델 파일 경로 (기본값: runs/detect/runs/detect/train2/weights/best.onnx)"
+        default="runs/detect/runs/detect/train/weights/best.onnx",
+        help="ONNX 모델 파일 경로 (기본값: runs/detect/runs/detect/train/weights/best.onnx)"
     )
     parser.add_argument(
         "--output",
